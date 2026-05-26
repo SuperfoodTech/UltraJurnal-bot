@@ -99,59 +99,47 @@ def parse_amount(val_str: str) -> float:
 def extract_meta(df: pd.DataFrame) -> dict:
     """
     Parse metadata from Table 1 (header info block).
-    Looks for patterns like  'NO. RE KE NIN G  :  862077 65 90'
     """
     log.debug("extract_meta: shape tabel header = %s", df.shape)
-    text = " ".join(clean(v) for row in df.values for v in row)
-    # normalise extra spaces that camelot introduces inside words
-    text = re.sub(r"\s+", " ", text)
-    log.debug("extract_meta: raw text (200 char pertama) = %r", text[:200])
 
-    def find_raw(patterns):
-        """Return the raw matched group (with internal spaces intact)."""
-        for pat in patterns:
-            m = re.search(pat, text, re.IGNORECASE)
+    rekening = ""
+    periode = ""
+    mata_uang = "IDR"
+
+    for row in df.values:
+        row_cells = [clean(cell) for cell in row if cell]
+        row_str = " ".join(row_cells).upper()
+
+        if "REKENING" in row_str or "RE KE NIN G" in row_str:
+            digits = re.findall(r"\d+", row_str)
+            if digits:
+                rekening = "".join(digits)
+
+        if "PERIODE" in row_str or "PE RIOD E" in row_str:
+            m = re.search(r"(?:PERIODE|PE\s*RIOD\s*E)\s*:\s*(.+)", row_str)
             if m:
-                log.debug("find_raw: pattern %r → match %r", pat, m.group(1).strip())
-                return m.group(1).strip()
-            log.debug("find_raw: pattern %r → tidak cocok", pat)
-        return ""
+                periode = m.group(1).strip()
+                # Remove spaces between digits: e.g. "2 026" -> "2026"
+                periode = re.sub(r"(?<=\d)\s+(?=\d)", "", periode)
+                # Collapse extra whitespace
+                periode = re.sub(r"\s+", " ", periode).strip()
+                # Normalize common month names spaces from Camelot
+                months_map = {
+                    "JANU ARI": "JANUARI",
+                    "FEBRU ARI": "FEBRUARI",
+                    "AGUS TUS": "AGUSTUS",
+                    "SEP TEMBER": "SEPTEMBER",
+                    "OK TOBER": "OKTOBER",
+                    "NO VEMBER": "NOVEMBER",
+                    "DE SEMBER": "DESEMBER"
+                }
+                for k, v in months_map.items():
+                    periode = periode.replace(k, v)
 
-    def find_compact(patterns):
-        """Return matched group with ALL spaces removed (for numbers)."""
-        raw = find_raw(patterns)
-        result = re.sub(r"\s+", "", raw)
-        log.debug("find_compact: raw=%r → compact=%r", raw, result)
-        return result
-
-    rekening = find_compact([
-        r"NO\.\s*RE\s*KE\s*NIN\s*G\s*:\s*([\d\s]+?)(?=[A-Z]|$)",
-        r"REKENING\s*:\s*([\d\s]+?)(?=[A-Z]|$)",
-    ])
-    log.debug("extract_meta: NO. REKENING = %r", rekening)
-
-    # PERIODE value e.g. "APRIL 2 026" → remove spaces in digits only → "APRIL 2026"
-    periode_raw = find_raw([
-        r"PE\s*RIOD\s*E\s*:\s*([A-Z0-9][A-Z0-9\s]+?)(?=MATA|GUNUNGANY|KOTA|INDONESIA|$)",
-        r"PERIODE\s*:\s*([A-Z0-9 ]+?)(?=MATA|$)",
-    ])
-    log.debug("extract_meta: periode_raw = %r", periode_raw)
-    # Collapse spaces: keep word boundaries but squash spaces inside digit runs
-    # e.g. "APRIL 2 026" → join → "APRIL 2026"
-    periode = periode_raw.strip()
-    # Remove spaces that are sandwiched between digits
-    periode = re.sub(r"(?<=\d)\s+(?=\d)", "", periode)
-    # Collapse multiple spaces elsewhere to single space
-    periode = re.sub(r"\s+", " ", periode).strip()
-    log.debug("extract_meta: PERIODE (setelah normalisasi) = %r", periode)
-
-    # MATA UANG e.g. "ID R" → remove spaces → "IDR"
-    mata_uang_raw = find_raw([
-        r"MATA\s*U\s*ANG\s*:\s*([A-Z][A-Z\s]{1,5})(?=\s|$)",
-        r"MATA\s*UANG\s*:\s*([A-Z]+)",
-    ])
-    mata_uang = re.sub(r"\s+", "", mata_uang_raw)
-    log.debug("extract_meta: MATA UANG = %r (raw: %r)", mata_uang, mata_uang_raw)
+        if re.search(r"MATA\s*U\s*ANG", row_str):
+            m = re.search(r"MATA\s*U\s*ANG\s*:\s*(.+)", row_str)
+            if m:
+                mata_uang = re.sub(r"\s+", "", m.group(1)).strip()
 
     result = {
         "NO. REKENING": rekening,
@@ -177,6 +165,15 @@ def parse_transactions(df: pd.DataFrame) -> list[dict]:
     cur    = None
 
     for i, row in enumerate(rows):
+        # Stop grouping if we hit a summary row anywhere in the table
+        row_str = " ".join([clean(v) for v in row]).upper()
+        if any(keyword in row_str for keyword in ["SALDO AWAL", "MUTASI CR", "MUTASI DB", "SALDO AKHIR"]):
+            log.debug("  baris %d: keyword summary terdeteksi -> skip & stop grouping", i)
+            if cur is not None:
+                groups.append(cur)
+            cur = None
+            continue
+
         date_val = clean(row[0])
         if DATE_RE.match(date_val):
             if cur is not None:
@@ -196,29 +193,19 @@ def parse_transactions(df: pd.DataFrame) -> list[dict]:
 
     transactions = []
     for gi, grp in enumerate(groups):
-        # col indices (from raw table): 0=TANGGAL, 1=KETERANGAN, 2=KETERANGAN(cont),
-        #                               3=CBG, 4=MUTASI, 5=SALDO(extra), 6=SALDO
+        # col indices (from explicit columns): 0=TANGGAL, 1=KETERANGAN, 2=CBG, 3=MUTASI, 4=SALDO
         tanggal    = clean(grp[0][0])
-        # merge all keterangan lines (cols 1+2 of all rows in group)
+        # merge all keterangan lines (col 1 of all rows in group)
         ket_parts  = []
         for r in grp:
-            for c in [1, 2]:
-                v = clean(r[c]) if c < len(r) else ""
-                if v:
-                    ket_parts.append(v)
+            v = clean(r[1]) if len(r) > 1 else ""
+            if v:
+                ket_parts.append(v)
         keterangan = " ".join(ket_parts)
 
-        cbg    = clean(grp[0][3]) if len(grp[0]) > 3 else ""
-        mutasi = clean(grp[0][4]) if len(grp[0]) > 4 else ""
-        saldo  = ""
-        saldo_src = ""
-        # saldo is in col 6 if present, else col 5
-        for c in [6, 5]:
-            v = clean(grp[0][c]) if c < len(grp[0]) else ""
-            if v and re.search(r"[\d,.]", v):
-                saldo = v
-                saldo_src = f"col[{c}]"
-                break
+        cbg    = clean(grp[0][2]) if len(grp[0]) > 2 else ""
+        mutasi = clean(grp[0][3]) if len(grp[0]) > 3 else ""
+        saldo  = clean(grp[0][4]) if len(grp[0]) > 4 else ""
 
         # strip trailing " DB" from mutasi and tag as debit in CBG if needed
         db_tagged = False
@@ -341,42 +328,35 @@ def convert(pdf_path: str, output_path: str):
     log.info("Output target : %s", os.path.abspath(output_path))
     log.info("=" * 60)
 
-    # ── Step 1: baca PDF dengan camelot ──────────────────────────────
-    log.info("[1/4] Membaca tabel dari PDF (flavor=stream) …")
-    tables = camelot.read_pdf(pdf_path, pages="all", flavor="stream")
-    log.debug("      camelot stream → %d tabel ditemukan", len(tables))
-
-    if len(tables) == 0:
-        log.warning("Stream tidak menemukan tabel → coba lattice …")
-        tables = camelot.read_pdf(pdf_path, pages="all", flavor="lattice")
-        log.debug("      camelot lattice → %d tabel ditemukan", len(tables))
-
-    if len(tables) < 2:
-        log.error("Dibutuhkan minimal 2 tabel (header + transaksi). Ditemukan: %d", len(tables))
+    # ── Step 1: baca metadata dari halaman 1 (flavor=stream) ─────────────────────────
+    log.info("[1/4] Membaca metadata dari halaman 1 (flavor=stream) …")
+    meta_tables = camelot.read_pdf(pdf_path, pages="1", flavor="stream")
+    if len(meta_tables) == 0:
+        log.error("Tidak dapat mengekstrak metadata dari halaman 1.")
         sys.exit(1)
-
-    # Log ringkasan setiap tabel
-    for i, t in enumerate(tables):
-        log.debug(
-            "  tabel[%d]: halaman=%s, shape=%s, akurasi_parsing=%.1f%%",
-            i, t.page, t.df.shape, t.parsing_report.get("accuracy", 0),
-        )
-    log.info("      Ditemukan %d tabel.", len(tables))
-
+    
     # ── Step 2: ekstrak metadata ──────────────────────────────────────
     log.info("[2/4] Mengekstrak metadata dari tabel-0 …")
-    meta = extract_meta(tables[0].df)
-    # Periksa apakah ada field kosong
+    meta = extract_meta(meta_tables[0].df)
     empty_fields = [k for k, v in meta.items() if not v]
     if empty_fields:
         log.warning("Field metadata kosong (regex tidak cocok): %s", empty_fields)
     else:
         log.info("      Metadata OK: %s", meta)
 
-    # ── Step 3: parse transaksi ───────────────────────────────────────
-    log.info("[3/4] Mem-parse transaksi dari %d tabel (halaman 2+) …", len(tables) - 1)
+    # ── Step 3: baca semua tabel transaksi dengan table_areas dan columns ────────────
+    log.info("[3/4] Membaca tabel transaksi dari semua halaman (flavor=stream) …")
+    tables = camelot.read_pdf(
+        pdf_path,
+        pages="all",
+        flavor="stream",
+        table_areas=["0,650,595,30"],
+        columns=["80,290,350,480"]
+    )
+    log.info("      Ditemukan %d tabel transaksi.", len(tables))
+
     all_trx = []
-    for idx, tbl in enumerate(tables[1:], start=1):
+    for idx, tbl in enumerate(tables):
         log.debug("  memproses tabel[%d] (halaman %s) …", idx, tbl.page)
         trx = parse_transactions(tbl.df)
         log.debug("  → %d transaksi dari tabel[%d]", len(trx), idx)
