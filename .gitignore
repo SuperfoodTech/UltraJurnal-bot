@@ -49,3 +49,6 @@ package-lock.json
 .vscode/
 *.swp
 *.swo
+
+# Docker
+docker-compose.override.yml
