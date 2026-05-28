@@ -14,6 +14,8 @@ converter/
 ├── run_discord_bot.sh    # Script untuk menjalankan bot (double-click)
 ├── run_converter.sh      # Script untuk menjalankan converter manual
 ├── pyproject.toml        # Konfigurasi dependensi Python (uv)
+├── Dockerfile            # Konfigurasi image Docker
+├── docker-compose.yml    # Orkestrasi container Docker
 ├── .env                  # Variabel environment (JANGAN di-commit ke Git!)
 ├── .env.example          # Template .env
 └── Hasil/                # Folder output file Excel (dibuat otomatis)
@@ -25,9 +27,10 @@ converter/
 
 | Kebutuhan                              | Keterangan                                                                     |
 | -------------------------------------- | ------------------------------------------------------------------------------ |
-| Python ≥ 3.10                         | Wajib                                                                          |
-| [`uv`](https://github.com/astral-sh/uv) | Package manager Python (pengganti pip/venv)                                    |
-| Bot Discord                            | Token dari[Discord Developer Portal](https://discord.com/developers/applications) |
+| Python ≥ 3.10                         | Wajib (jika dijalankan langsung/tanpa Docker)                                  |
+| [`uv`](https://github.com/astral-sh/uv) | Package manager Python (jika dijalankan langsung/tanpa Docker)                 |
+| Docker & Docker Compose                | Opsional (rekomendasi untuk deploy server/VPS)                                 |
+| Bot Discord                            | Token dari [Discord Developer Portal](https://discord.com/developers/applications) |
 | Google Apps Script                     | URL Web App dari deploy `gdrive_upload.gs`                                   |
 
 ### Install `uv`
@@ -103,6 +106,36 @@ uv run python discord_bot.py
 ```bash
 python discord_bot.py
 ```
+
+#### Cara D — Menggunakan Docker & Docker Compose (Rekomendasi VPS/Server)
+
+Jika Anda ingin menjalankan bot secara terus-menerus di server (VPS) atau ingin lingkungan terisolasi tanpa perlu meng-install Python secara lokal, Anda bisa menggunakan Docker.
+
+1. **Jalankan Container di Background**
+   ```bash
+   docker compose up -d --build
+   ```
+   *Parameter `-d` menjalankan container di latar belakang (detached), dan `--build` memastikan image dibangun ulang dengan kode terbaru.*
+
+2. **Lihat Log Aktivitas Bot**
+   ```bash
+   docker compose logs -f ultrajurnal-bot
+   ```
+   *Gunakan `Ctrl+C` untuk keluar dari tampilan log tanpa menghentikan bot.*
+
+3. **Menghentikan Bot**
+   ```bash
+   docker compose down
+   ```
+
+4. **Akses File Hasil Konversi**
+   Folder `/app/Hasil` di dalam container dipetakan ke folder `./Hasil` di host lokal Anda secara real-time. Anda bisa langsung mengambil file Excel di direktori `./Hasil` lokal.
+
+5. **Memperbarui Bot**
+   Jika Anda melakukan perubahan kode atau melakukan pull dari Git, jalankan perintah berikut untuk rebuild dan restart:
+   ```bash
+   docker compose up -d --build
+   ```
 
 Bot yang berjalan sukses akan menampilkan log seperti:
 
