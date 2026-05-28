@@ -41,7 +41,124 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ---
 
-## 🚀 Cara Menjalankan Bot
+## 🖥️ Setup Pertama Kali di Server (VPS/Linux)
+
+> Panduan ini untuk deploy bot ke server fresh (Ubuntu/Debian). Jalankan sekali saja.
+
+### Langkah 1 — Install Docker
+
+```bash
+# Update package list
+sudo apt update && sudo apt upgrade -y
+
+# Install dependencies
+sudo apt install -y ca-certificates curl gnupg
+
+# Tambahkan GPG key Docker
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Tambahkan repository Docker
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker Engine & Compose
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+# Tambahkan user ke group docker (tidak perlu sudo setiap kali)
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Verifikasi instalasi
+docker --version
+docker compose version
+```
+
+### Langkah 2 — Clone Repositori
+
+```bash
+git clone https://github.com/SuperfoodTech/UltraJurnal-bot.git
+cd UltraJurnal-bot
+```
+
+### Langkah 3 — Buat File `.env`
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Isi nilai berikut di dalam `.env`:
+
+```env
+# Token bot dari https://discord.com/developers/applications
+DISCORD_BOT_TOKEN=token_bot_kamu_di_sini
+
+# URL Web App hasil Deploy dari gdrive_upload.gs
+APPSCRIPT_WEBAPP_URL=https://script.google.com/macros/s/.../exec
+
+# Opsional: ID server Discord untuk sync command instan (tanpa ini ~1 jam)
+# DISCORD_GUILD_ID=123456789012345678
+```
+
+Simpan dengan `Ctrl+O` → `Enter` → `Ctrl+X`.
+
+> **Penting:** Jangan pernah commit file `.env` ke Git!
+
+### Langkah 4 — Setup Google Apps Script
+
+> Langkah ini hanya perlu dilakukan **sekali**.
+
+1. Buka [Google Apps Script](https://script.google.com/) → **New Project**
+2. Copy-paste isi file `gdrive_upload.gs` ke editor
+3. Ubah variabel `FOLDER_ID` ke ID folder Google Drive tujuan:
+   ```js
+   var FOLDER_ID = "ID_FOLDER_GDRIVE_KAMU";
+   ```
+4. Klik **Deploy** → **New Deployment**
+5. Pilih: **Type:** Web App • **Execute as:** Me • **Who has access:** Anyone
+6. Klik **Deploy**, authorize, lalu **salin URL** yang muncul
+7. Tempel URL ke `.env` sebagai nilai `APPSCRIPT_WEBAPP_URL`
+
+### Langkah 5 — Jalankan Bot
+
+```bash
+docker compose up -d --build
+```
+
+### Langkah 6 — Verifikasi Bot Berjalan
+
+```bash
+# Lihat log real-time
+docker compose logs -f ultrajurnal-bot
+```
+
+Output yang diharapkan:
+
+```
+10:00:00 [INFO    ] discord_bot — 🚀 Menjalankan UltraJurnal.bot…
+10:00:02 [INFO    ] discord_bot — ✅ Slash commands synced: 1 command(s)
+10:00:02 [INFO    ] discord_bot — 🤖 Bot online: UltraJurnal.bot#1234 (ID: 123456789)
+```
+
+Tekan `Ctrl+C` untuk keluar dari log — **bot tetap berjalan** di background.
+
+### Perintah Manajemen Harian
+
+| Perintah | Fungsi |
+| -------- | ------ |
+| `docker compose up -d --build` | Start/restart bot (rebuild image) |
+| `docker compose down` | Stop bot |
+| `docker compose logs -f ultrajurnal-bot` | Lihat log real-time |
+| `docker compose ps` | Cek status container |
+| `git pull && docker compose up -d --build` | Update bot ke versi terbaru |
+
+---
+
+## 🚀 Cara Menjalankan Bot (Lokal)
 
 ### Langkah 1 — Konfigurasi `.env`
 
@@ -165,7 +282,7 @@ Alur kerja:
 | 2️⃣   | Klik tombol**📤 Upload PDF Rekening**                                           |
 | 3️⃣   | Isi form popup (nama alias & catatan — keduanya opsional), lalu klik**Submit** |
 | 4️⃣   | Kirim file**PDF** mutasi rekening BCA ke channel yang sama                      |
-| 5️⃣   | Bot memproses otomatis dan mengirimkan**link Google Drive** ke channel + DM     |
+| 5️⃣   | Bot memproses otomatis dan mengirimkan **link Google Drive** ke channel |
 
 ---
 
@@ -255,7 +372,7 @@ sequenceDiagram
     G->>D: Simpan file ke folder
     D->>G: File ID + link
     G->>B: {"success": true, "link": "..."}
-    B->>U: ✅ Link Google Drive (channel + DM)
+    B->>U: ✅ Link Google Drive (channel)
 ```
 
 ---
