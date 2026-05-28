@@ -18,6 +18,7 @@ Variabel environment yang dibutuhkan (lihat .env.example):
 
 import os
 import sys
+import time
 import asyncio
 import logging
 import tempfile
@@ -201,7 +202,16 @@ class UploadPDFModal(discord.ui.Modal, title="📄 UltraJurnal.bot — Upload PD
                 log.info("Downloaded: %s → %s", attachment.filename, pdf_path)
 
                 # 2. Konversi PDF → xlsx
+                t0 = time.perf_counter()
                 success, conv_log = await run_converter(pdf_path, xlsx_path)
+                elapsed = time.perf_counter() - t0
+
+                elapsed_min = int(elapsed // 60)
+                elapsed_sec = elapsed % 60
+                if elapsed_min > 0:
+                    elapsed_str = f"{elapsed_min}m {elapsed_sec:.1f}s"
+                else:
+                    elapsed_str = f"{elapsed_sec:.1f}s"
 
                 if not success:
                     raise RuntimeError(f"Konversi gagal:\n```\n{conv_log[-2000:]}\n```")
@@ -218,31 +228,14 @@ class UploadPDFModal(discord.ui.Modal, title="📄 UltraJurnal.bot — Upload PD
                     title="✅ Konversi Berhasil!",
                     description=(
                         f"📄 **File PDF:** `{attachment.filename}`\n"
-                        f"📊 **Excel:** `{xlsx_filename}`\n\n"
+                        f"📊 **Excel:** `{xlsx_filename}`\n"
+                        f"⏱️ **Durasi konversi:** `{elapsed_str}`\n\n"
                         f"🔗 **Link Google Drive:**\n{drive_link}"
                     ),
                     color=0x57F287,
                 )
                 success_embed.set_footer(text="✨ File berhasil diupload ke Google Drive")
                 await status_msg.edit(embed=success_embed)
-
-                # Kirim DM juga sebagai backup
-                try:
-                    dm = await interaction.user.create_dm()
-                    dm_embed = discord.Embed(
-                        title="📬 UltraJurnal.bot — Hasil Konversi",
-                        description=(
-                            f"Hei {interaction.user.display_name}! File kamu sudah selesai diproses.\n\n"
-                            f"📄 **File asli:** `{attachment.filename}`\n"
-                            f"📊 **Excel output:** `{xlsx_filename}`\n\n"
-                            f"🔗 **Link Google Drive:**\n{drive_link}"
-                        ),
-                        color=0x0077B6,
-                    )
-                    dm_embed.set_footer(text="UltraJurnal.bot")
-                    await dm.send(embed=dm_embed)
-                except discord.Forbidden:
-                    pass  # User menonaktifkan DM, tidak masalah
 
             except Exception as exc:
                 log.error("Gagal memproses %s: %s", attachment.filename, traceback.format_exc())

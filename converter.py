@@ -5,7 +5,7 @@ Mengekstrak data dari PDF mutasi rekening ke satu sheet Excel dengan kolom:
   NO. REKENING | PERIODE | MATA UANG | TANGGAL | KETERANGAN | CBG | MUTASI | SALDO
 """
 
-import os, sys, re, argparse, logging, datetime
+import os, sys, re, argparse, logging, datetime, time
 from pathlib import Path
 
 logging.basicConfig(
@@ -322,6 +322,7 @@ def convert(pdf_path: str, output_path: str):
         log.error("File tidak ditemukan: %s", pdf_path)
         sys.exit(1)
 
+    t0 = time.perf_counter()
     file_size = os.path.getsize(pdf_path)
     log.info("=" * 60)
     log.info("Mulai konversi: %s  (%.1f KB)", pdf_path, file_size / 1024)
@@ -375,8 +376,18 @@ def convert(pdf_path: str, output_path: str):
         records.append(row)
 
     write_excel(records, output_path, Path(pdf_path).stem)
+
+    elapsed = time.perf_counter() - t0
+    elapsed_min = int(elapsed // 60)
+    elapsed_sec = elapsed % 60
+    if elapsed_min > 0:
+        elapsed_str = f"{elapsed_min}m {elapsed_sec:.1f}s"
+    else:
+        elapsed_str = f"{elapsed_sec:.1f}s"
+
     log.info("=" * 60)
     log.info("Selesai! Total %d baris ditulis ke: %s", len(records), os.path.abspath(output_path))
+    log.info("⏱  Durasi konversi: %s", elapsed_str)
     log.info("=" * 60)
 
 

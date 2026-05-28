@@ -100,6 +100,7 @@ convert_file() {
     local outfile="$OUT_DIR/${fname%.pdf}.xlsx"
 
     START_TIME=$(date +"%H:%M:%S")
+    SECONDS=0
     echo -e "  ${Y}⟳  [${START_TIME}] Memproses:${NC} ${W}$fname${NC}"
     echo -e "  ${D}   Output  → $outfile${NC}"
     echo -e "  ${D}   Logs:${NC}"
@@ -108,11 +109,22 @@ convert_file() {
     uv run --project "$SCRIPT_DIR" "$SCRIPT_DIR/converter.py" "$pdf" -o "$outfile"
     STATUS=$?
 
+    ELAPSED=$SECONDS
     END_TIME=$(date +"%H:%M:%S")
+    ELAPSED_MIN=$((ELAPSED / 60))
+    ELAPSED_SEC=$((ELAPSED % 60))
+    if [ $ELAPSED_MIN -gt 0 ]; then
+        ELAPSED_STR="${ELAPSED_MIN}m ${ELAPSED_SEC}s"
+    else
+        ELAPSED_STR="${ELAPSED_SEC}s"
+    fi
+
     if [ $STATUS -eq 0 ]; then
         echo -e "\n  ${G}✔  [${END_TIME}] Berhasil!${NC}  ${D}→ $(basename "$outfile")${NC}"
+        echo -e "  ${D}   ⏱  Durasi konversi: ${W}${ELAPSED_STR}${NC}"
     else
         echo -e "\n  ${R}✖  [${END_TIME}] Gagal mengkonversi $fname${NC}"
+        echo -e "  ${D}   ⏱  Durasi berjalan: ${W}${ELAPSED_STR}${NC}"
     fi
     echo ""
 }
