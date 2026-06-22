@@ -1,0 +1,13 @@
+[Unit]
+Description=UltraJurnal Discord PDF Converter Bot
+After=network.target
+
+[Service]
+WorkingDirectory=/mnt/DATA/Proyek/converter
+ExecStart=/mnt/DATA/Proyek/converter/.venv/bin/python discord_bot.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/mnt/DATA/Proyek/converter/.env
+
+[Install]
+WantedBy=default.target
