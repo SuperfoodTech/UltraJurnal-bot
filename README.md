@@ -14,8 +14,8 @@ converter/
 ├── run_discord_bot.sh    # Script untuk menjalankan bot (double-click)
 ├── run_converter.sh      # Script untuk menjalankan converter manual
 ├── pyproject.toml        # Konfigurasi dependensi Python (uv)
-├── Dockerfile            # Konfigurasi image Docker
-├── docker-compose.yml    # Orkestrasi container Docker
+├── deploy_vps.sh         # Script deployment bot ke VPS (systemd)
+├── ultrajurnal-bot.service # Template file systemd service
 ├── .env                  # Variabel environment (JANGAN di-commit ke Git!)
 ├── .env.example          # Template .env
 └── Hasil/                # Folder output file Excel (dibuat otomatis)
@@ -27,9 +27,9 @@ converter/
 
 | Kebutuhan                              | Keterangan                                                                     |
 | -------------------------------------- | ------------------------------------------------------------------------------ |
-| Python ≥ 3.10                         | Wajib (jika dijalankan langsung/tanpa Docker)                                  |
-| [`uv`](https://github.com/astral-sh/uv) | Package manager Python (jika dijalankan langsung/tanpa Docker)                 |
-| Docker & Docker Compose                | Opsional (rekomendasi untuk deploy server/VPS)                                 |
+| Python ≥ 3.10                         | Wajib                                                                          |
+| [`uv`](https://github.com/astral-sh/uv) | Package manager Python                                                         |
+| Systemd                                | Wajib untuk deployment VPS/Server (otomatis dikonfigurasi script)              |
 | Bot Discord                            | Token dari [Discord Developer Portal](https://discord.com/developers/applications) |
 | Google Apps Script                     | URL Web App dari deploy `gdrive_upload.gs`                                   |
 
@@ -43,48 +43,16 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 🖥️ Setup Pertama Kali di Server (VPS/Linux)
 
-> Panduan ini untuk deploy bot ke server fresh (Ubuntu/Debian). Jalankan sekali saja.
+> Panduan ini untuk deploy bot ke server fresh (Ubuntu/Debian) menggunakan Systemd. Jalankan sekali saja.
 
-### Langkah 1 — Install Docker
-
-```bash
-# Update package list
-sudo apt update && sudo apt upgrade -y
-
-# Install dependencies
-sudo apt install -y ca-certificates curl gnupg
-
-# Tambahkan GPG key Docker
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-# Tambahkan repository Docker
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Install Docker Engine & Compose
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-# Tambahkan user ke group docker (tidak perlu sudo setiap kali)
-sudo usermod -aG docker $USER
-newgrp docker
-
-# Verifikasi instalasi
-docker --version
-docker compose version
-```
-
-### Langkah 2 — Clone Repositori
+### Langkah 1 — Clone Repositori
 
 ```bash
 git clone https://github.com/SuperfoodTech/UltraJurnal-bot.git
 cd UltraJurnal-bot
 ```
 
-### Langkah 3 — Buat File `.env`
+### Langkah 2 — Buat File `.env`
 
 ```bash
 cp .env.example .env
@@ -108,7 +76,7 @@ Simpan dengan `Ctrl+O` → `Enter` → `Ctrl+X`.
 
 > **Penting:** Jangan pernah commit file `.env` ke Git!
 
-### Langkah 4 — Setup Google Apps Script
+### Langkah 3 — Setup Google Apps Script
 
 > Langkah ini hanya perlu dilakukan **sekali**.
 
@@ -123,17 +91,19 @@ Simpan dengan `Ctrl+O` → `Enter` → `Ctrl+X`.
 6. Klik **Deploy**, authorize, lalu **salin URL** yang muncul
 7. Tempel URL ke `.env` sebagai nilai `APPSCRIPT_WEBAPP_URL`
 
-### Langkah 5 — Jalankan Bot
+### Langkah 4 — Jalankan Script Deployment
+
+Jalankan script untuk menginstal dependensi sistem (termasuk Ghostscript), `uv`, menyiapkan virtual environment, dan mendaftarkan systemd service:
 
 ```bash
-docker compose up -d --build
+bash deploy_vps.sh
 ```
 
-### Langkah 6 — Verifikasi Bot Berjalan
+### Langkah 5 — Verifikasi Bot Berjalan
 
 ```bash
 # Lihat log real-time
-docker compose logs -f ultrajurnal-bot
+sudo journalctl -u ultrajurnal-bot.service -f
 ```
 
 Output yang diharapkan:
@@ -144,17 +114,18 @@ Output yang diharapkan:
 10:00:02 [INFO    ] discord_bot — 🤖 Bot online: UltraJurnal.bot#1234 (ID: 123456789)
 ```
 
-Tekan `Ctrl+C` untuk keluar dari log — **bot tetap berjalan** di background.
+Tekan `Ctrl+C` untuk keluar dari log — **bot tetap berjalan** di background sebagai service.
 
 ### Perintah Manajemen Harian
 
 | Perintah | Fungsi |
 | -------- | ------ |
-| `docker compose up -d --build` | Start/restart bot (rebuild image) |
-| `docker compose down` | Stop bot |
-| `docker compose logs -f ultrajurnal-bot` | Lihat log real-time |
-| `docker compose ps` | Cek status container |
-| `git pull && docker compose up -d --build` | Update bot ke versi terbaru |
+| `sudo systemctl start ultrajurnal-bot` | Start bot |
+| `sudo systemctl stop ultrajurnal-bot` | Stop bot |
+| `sudo systemctl restart ultrajurnal-bot` | Restart bot |
+| `sudo systemctl status ultrajurnal-bot` | Cek status service |
+| `sudo journalctl -u ultrajurnal-bot.service -f` | Lihat log real-time |
+| `git pull && uv sync && sudo systemctl restart ultrajurnal-bot` | Update bot ke versi terbaru |
 
 ---
 
@@ -224,45 +195,7 @@ uv run python discord_bot.py
 python discord_bot.py
 ```
 
-#### Cara D — Menggunakan Docker & Docker Compose (Rekomendasi VPS/Server)
 
-Jika Anda ingin menjalankan bot secara terus-menerus di server (VPS) atau ingin lingkungan terisolasi tanpa perlu meng-install Python secara lokal, Anda bisa menggunakan Docker.
-
-1. **Jalankan Container di Background**
-   ```bash
-   docker compose up -d --build
-   ```
-   *Parameter `-d` menjalankan container di latar belakang (detached), dan `--build` memastikan image dibangun ulang dengan kode terbaru.*
-
-2. **Lihat Log Aktivitas Bot**
-   ```bash
-   docker compose logs -f ultrajurnal-bot
-   ```
-   *Gunakan `Ctrl+C` untuk keluar dari tampilan log tanpa menghentikan bot.*
-
-3. **Menghentikan Bot**
-   ```bash
-   docker compose down
-   ```
-
-4. **Akses File Hasil Konversi**
-   Folder `/app/Hasil` di dalam container dipetakan ke folder `./Hasil` di host lokal Anda secara real-time. Anda bisa langsung mengambil file Excel di direktori `./Hasil` lokal.
-
-5. **Memperbarui Bot**
-   Jika Anda melakukan perubahan kode atau melakukan pull dari Git, jalankan perintah berikut untuk rebuild dan restart:
-   ```bash
-   docker compose up -d --build
-   ```
-
-Bot yang berjalan sukses akan menampilkan log seperti:
-
-```
-10:00:00 [INFO    ] discord_bot — 🚀 Menjalankan UltraJurnal.bot…
-10:00:02 [INFO    ] discord_bot — ✅ Slash commands synced: 1 command(s)
-10:00:02 [INFO    ] discord_bot — 🤖 Bot online: UltraJurnal.bot#1234 (ID: 123456789)
-```
-
-Hentikan bot dengan menekan **Ctrl+C**.
 
 ---
 
