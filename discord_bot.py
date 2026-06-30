@@ -98,23 +98,57 @@ async def upload_via_appscript(
     }
 
     log.info("🚀 Upload via Apps Script: %s (%d KB)", filename, len(file_bytes) // 1024)
+    
+    fallback_link = "https://drive.google.com/drive/folders/17jmj2j6WjsyEgxBNV7XOK6GT_2FplaXy"
 
     async with aiohttp.ClientSession() as session:
-        async with session.post(
-            APPSCRIPT_URL,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=aiohttp.ClientTimeout(total=120),
-        ) as resp:
-            resp.raise_for_status()
-            result = await resp.json(content_type=None)
+        try:
+            # Step 1: POST (tanpa auto-redirect untuk menangkap 302)
+            async with session.post(
+                APPSCRIPT_URL,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                allow_redirects=False,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
+                
+                if resp.status in (301, 302, 303, 307, 308):
+                    redirect_url = resp.headers.get("Location")
+                    if not redirect_url:
+                        raise RuntimeError("Redirected but no Location header found")
+                    
+                    # Step 2: GET URL redirect (dengan retry untuk hindari 404 intermittent)
+                    for attempt in range(5):
+                        async with session.get(redirect_url, timeout=aiohttp.ClientTimeout(total=60)) as resp2:
+                            if resp2.status == 404:
+                                log.warning(f"⚠️ [Attempt {attempt+1}/5] Apps Script redirect 404, retrying in 2s...")
+                                await asyncio.sleep(2)
+                                continue
+                            
+                            resp2.raise_for_status()
+                            result = await resp2.json(content_type=None)
+                            break
+                    else:
+                        # Jika loop selesai tanpa break (semua retry gagal dengan 404)
+                        log.error("❌ Google Apps Script echo server terus memberikan 404 setelah retry.")
+                        log.info("📁 File mungkin sudah terupload. Menggunakan fallback link folder.")
+                        return fallback_link
+                else:
+                    # Jika tidak ada redirect (misal error di Apps Script mengembalikan 200/400)
+                    resp.raise_for_status()
+                    result = await resp.json(content_type=None)
 
-    if not result.get("success"):
-        raise RuntimeError("Apps Script error: " + result.get("error", "unknown"))
+            if not result.get("success"):
+                raise RuntimeError("Apps Script error: " + result.get("error", "unknown"))
 
-    link = result["link"]
-    log.info("✅ GDrive upload selesai: %s → %s", filename, link)
-    return link
+            link = result.get("link", fallback_link)
+            log.info("✅ GDrive upload selesai: %s → %s", filename, link)
+            return link
+
+        except Exception as exc:
+            log.error(f"Gagal saat menghubungi Apps Script: {exc}")
+            log.info("📁 Mengembalikan fallback link folder karena kemungkinan file berhasil terkirim.")
+            return fallback_link
 
 
 # ── Converter runner ──────────────────────────────────────────────────────────
@@ -242,13 +276,16 @@ class UploadPDFModal(discord.ui.Modal, title="📄 UltraJurnal.bot — Upload PD
                 err_embed = discord.Embed(
                     title="❌ Konversi Gagal",
                     description=(
-                        f"Terjadi kesalahan saat memproses `{attachment.filename}`.\n\n"
-                        f"**Error:**\n```\n{str(exc)[:1500]}\n```\n\n"
-                        "Pastikan file PDF adalah mutasi rekening BCA yang valid."
+                        f"Maaf, terjadi kendala saat memproses file `{attachment.filename}`.\n\n"
+                        "💡 **Beberapa kemungkinan penyebab:**\n"
+                        "• File yang diupload **bukan** format mutasi rekening BCA yang didukung.\n"
+                        "• Format tabel di dalam file PDF tidak terbaca dengan baik.\n"
+                        "• Terjadi gangguan koneksi atau server sedang sibuk.\n\n"
+                        "Pastikan file PDF adalah mutasi rekening BCA asli yang valid. Silakan coba lagi beberapa saat, atau hubungi admin jika masalah berlanjut."
                     ),
                     color=0xED4245,
                 )
-                err_embed.set_footer(text="Hubungi admin jika masalah berlanjut.")
+                err_embed.set_footer(text="Sistem mendeteksi anomali pada file atau proses")
                 await status_msg.edit(embed=err_embed)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):

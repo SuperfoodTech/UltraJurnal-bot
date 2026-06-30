@@ -232,7 +232,7 @@ Alur kerja:
 | `UploadPDFModal`         | Modal          | Form pop-up input nama alias dan catatan                                     |
 | `on_message`             | Event Handler  | Mendeteksi attachment PDF dari user yang sedang dalam status menunggu upload |
 | `run_converter()`        | Async Function | Menjalankan `converter.py` sebagai subprocess asinkron                     |
-| `upload_via_appscript()` | Async Function | Encode file ke base64 dan POST ke Google Apps Script Web App                 |
+| `upload_via_appscript()` | Async Function | Encode file ke base64, POST ke Google Apps Script Web App, dan menangani redirect 302 dengan retry otomatis jika server sibuk |
 | `download_file()`        | Async Function | Mengunduh attachment PDF dari Discord ke direktori temp                      |
 | `on_ready()`             | Event Handler  | Dipanggil saat bot online: sync slash commands & register persistent view    |
 
