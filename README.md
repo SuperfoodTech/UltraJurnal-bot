@@ -203,7 +203,7 @@ python discord_bot.py
 
 ```
 Alur kerja:
-  /mulai  →  Klik "📤 Upload PDF"  →  Isi form alias & catatan
+  /bca    →  Klik "📤 Upload PDF"  →  Isi form alias & catatan
           →  Kirim file PDF ke channel  →  Tunggu link Google Drive
 ```
 
@@ -211,7 +211,7 @@ Alur kerja:
 
 | Langkah | Aksi                                                                                  |
 | ------- | ------------------------------------------------------------------------------------- |
-| 1️⃣   | Ketik `/mulai` di channel Discord                                                   |
+| 1️⃣   | Ketik `/bca` di channel Discord                                                     |
 | 2️⃣   | Klik tombol**📤 Upload PDF Rekening**                                           |
 | 3️⃣   | Isi form popup (nama alias & catatan — keduanya opsional), lalu klik**Submit** |
 | 4️⃣   | Kirim file**PDF** mutasi rekening BCA ke channel yang sama                      |
@@ -225,7 +225,7 @@ Alur kerja:
 
 | Komponen                   | Tipe           | Keterangan                                                                   |
 | -------------------------- | -------------- | ---------------------------------------------------------------------------- |
-| `/mulai`                 | Slash Command  | Menampilkan panel utama dengan tombol upload                                 |
+| `/bca`                   | Slash Command  | Menampilkan panel utama dengan tombol upload                                 |
 | `UploadView`             | UI View        | Panel tombol interaktif (persisten setelah restart)                          |
 | `📤 Upload PDF Rekening` | Button         | Membuka modal form untuk input alias & catatan                               |
 | `❓ Bantuan`             | Button         | Menampilkan panduan penggunaan bot (hanya terlihat oleh pengguna yang klik)  |
@@ -288,7 +288,7 @@ sequenceDiagram
     participant G as 📜 Apps Script
     participant D as ☁️ Google Drive
 
-    U->>B: /mulai
+    U->>B: /bca
     B->>U: Panel + Tombol Upload
     U->>B: Klik "📤 Upload PDF"
     B->>U: Modal (alias & catatan)

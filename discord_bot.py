@@ -3,7 +3,7 @@
 Discord Bot — UltraJurnal.bot
 ================================
 Alur kerja:
-  1. User ketik  /mulai  → bot tampilkan tombol "Upload PDF"
+  1. User ketik  /bca    → bot tampilkan tombol "Upload PDF"
   2. User klik tombol   → muncul modal (pop-up) isian alias & catatan
   3. User kirim file PDF sebagai attachment di channel
   4. Bot men-download PDF, menjalankan converter.py → .xlsx
@@ -349,10 +349,10 @@ class UploadView(discord.ui.View):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SLASH COMMAND — /mulai
+# SLASH COMMAND — /bca
 # ══════════════════════════════════════════════════════════════════════════════
-@tree.command(name="mulai", description="Mulai konversi PDF rekening BCA ke Excel")
-async def cmd_mulai(interaction: discord.Interaction):
+@tree.command(name="bca", description="Mulai konversi PDF rekening BCA ke Excel")
+async def cmd_bca(interaction: discord.Interaction):
     """Tampilkan panel utama dengan tombol upload."""
     embed = discord.Embed(
         title="📒 UltraJurnal.bot",
